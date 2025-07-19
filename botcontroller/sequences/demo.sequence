@@ -1,0 +1,24 @@
+block
+{
+FFT#MOVE#D_F_D
+FFFT#MOVE#D_F_D
+sleep 1000
+FFFRT#MOVE#D_SR_D
+}
+
+
+block sig01
+{
+FFT#MOVE#D_F_D;RALIFE#DBB
+FFT#MOVE#D_F_D
+FFT#MOVE#D_F_D
+}
+
+
+
+block sig02 sig03
+{
+FFT#MOVE#D_F_D;RALIFE;sig3#DBB
+FFT#MOVE#D_F_D
+FFT#MOVE#D_F_D
+}

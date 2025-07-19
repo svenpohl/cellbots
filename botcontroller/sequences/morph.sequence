@@ -1,0 +1,25 @@
+block 
+{
+FLLFFFRFR#MOVE#B_TB_D;D_R_D;D_R_D;D_R_D;D_B_D;D_B_D;ALIFE;sig1#DLRB
+}
+
+block sig1 
+{
+FLLFFFRF#MOVE#L_TL_D;D_B_D;D_B_D;D_B_L;L_TL_D;ALIFE;sig2#DDLRB
+}
+
+block sig2 
+{
+FLLFFRFR#MOVE#B_TB_D;D_R_D;D_R_D;D_B_B;B_T_B;B_TB_D;D_BD_F;ALIFE;sig3#FDDLRB
+}
+
+block sig3 
+{
+FLLLL#MOVE#F_TF_D;D_R_D;D_R_D;D_T_R;R_TR_D;ALIFE;sig4#DDDLRB
+}
+
+block sig4 
+{
+FLLFFF#MOVE#R_TR_D;D_B_D;D_B_D;D_B_L;L_T_L;ALIFE;FIN#LDDLRB
+}
+
