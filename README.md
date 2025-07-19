@@ -1,10 +1,10 @@
-# CellBots – A Simulator for Programmable Matter
+# SP-CellBots – A Simulator for Programmable Matter
 
 Sven Pohl B.Sc. <sven.pohl@zen-systems.de> — MIT License © 2025  
 This project is licensed under the [MIT License](./LICENSE).
 
-**CellBots** is an open simulation and control system for programmable matter.  
-It is based on a fictional hardware model: the **CellBot**, a modular unit capable of moving across identical elements, stacking, and forming fixed connections in order to *morph* into arbitrary 
+**SP-CellBots** is an open simulation and control system for programmable matter.  
+It is based on a fictional hardware model: the **SP-CellBot**, a modular unit capable of moving across identical elements, stacking, and forming fixed connections in order to *morph* into arbitrary 
 structures. 
 
 <div align="center"><strong>„Morph. Code. Forge.“</strong></div>
