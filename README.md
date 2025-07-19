@@ -7,6 +7,8 @@ This project is licensed under the [MIT License](./LICENSE).
 It is based on a fictional hardware model: the **SP-CellBot**, a modular unit capable of moving across identical elements, stacking, and forming fixed connections in order to *morph* into arbitrary 
 structures. 
 
+> ⚠️ Note: The term "CellBots" is used here in a descriptive, non-commercial context and is not affiliated with any external research groups or trademarks.
+
 <div align="center"><strong>„Morph. Code. Forge.“</strong></div>
 
 
