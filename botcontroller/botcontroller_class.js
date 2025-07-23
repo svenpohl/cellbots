@@ -32,7 +32,8 @@ const readline = require('readline');
 const WebSocket = require('ws');
 const http      = require('http');
 
-const self_assembly = require('./self_assembly'); 
+const self_assembly   = require('./self_assembly'); 
+const signature_class = require('./signature_class'); 
 
 
 //const MorphBFSSimple    = require('./morph/morph_bfs_simple');
@@ -54,7 +55,8 @@ class botcontroller_class
   
 constructor() 
    {            
-   this.self_assembly_obj = new self_assembly( );
+   this.self_assembly_obj   = new self_assembly( );
+   this.signature_class_obj = new signature_class( );
    
       
    Logger.reset();
@@ -157,7 +159,7 @@ constructor()
    
    
 
-
+/*
 loadconfig(filePath) {
   const configData = fs.readFileSync(filePath, 'utf-8');
   const config = {};
@@ -172,6 +174,76 @@ loadconfig(filePath) {
 
   return config;
 }  
+*/
+
+loadconfig(filePath) {
+  const configData = fs.readFileSync(filePath, 'utf-8');
+  const config = {};
+
+  configData.split('\n').forEach(line => {
+    const [key, value] = this.split_first(line.trim(), '=');
+    if (key && value !== null) {
+      config[key.trim()] = value.trim();
+    }
+  });
+
+  return config;
+}
+
+  
+ 
+split_first(text, separator) {
+  const index = text.indexOf(separator);
+  if (index === -1) {
+    return [text, null]; // Separator not found
+  }
+  const part1 = text.slice(0, index);
+  const part2 = text.slice(index + separator.length);
+  return [part1, part2];
+}
+
+ 
+
+ 
+//
+// sign()
+//  
+sign( param )
+{
+let signparam = "";
+
+
+if ( this.config.enable_signing == "true" )
+   {
+   let param_to_sign = this.split_first( param, '#' )[1];
+   
+   if ( this.config.signature_type == 'HMAC' )
+      {
+      signparam += "01";
+      signparam += this.signature_class_obj.signMessage( this.signature_class_obj.SIG_HMAC, param_to_sign, this.config.private_key_or_secret );      
+      } // HMAC
+
+   if ( this.config.signature_type == 'ED25519' )
+      {
+      signparam += "02";
+      signparam += this.signature_class_obj.signMessage( this.signature_class_obj.SIG_ED25519, param_to_sign, this.config.private_key_or_secret );      
+      } // HMAC
+
+   if ( this.config.signature_type == 'RSA' )
+      {      
+      let private_key = this.signature_class_obj.restorePEM( this.config.private_key_or_secret , "PRIVATE KEY");
+                 
+      signparam += "03";
+      signparam += this.signature_class_obj.signMessage( this.signature_class_obj.SIG_RSA, param_to_sign, private_key );      
+      } // HMAC
+   
+   return ( signparam + "@" + param ); 
+   } // this.config.enable_signing
+
+return ( param );
+} // sign()
+  
+  
   
   
 //
@@ -323,11 +395,25 @@ this.client.connect( this.PORT, this.HOST, () => {
 
               param = "FFT#XSC#ff0000#";       // SetColor
               
+              param = "FFF#MOVE#D_F_D";       // SetColor
+              
+               
+              param = "FFF#XDUMMY#{dummy:'ok',x:42,parameter1:'this is a test1' }#"; // Dummy-X Command  
+                 
+              param = "FF#SYS#LOCKFRL"; // LOCK
                  
                  
+              param = "FF#XSC#ff0000#";
+              
+              //param = "FF#MOVE#NONCE;42"; // NONCE
+              
+                 
+              // Signing
+              //console.log("param: ["+param+"]");
+              param = this.sign( param );
+                  
               cmd = "{ \"cmd\":\"push\", \"param\":\""+param+"\" }\n";
-              
-              
+                            
               console.log("CMD:" + cmd);
                            
               }
@@ -335,16 +421,33 @@ this.client.connect( this.PORT, this.HOST, () => {
            
            
    if (input == "push2")
-              {               
-         
-             
+              {                                     
               param = "FFT#MOVE#D_F_D"; //   Move
-        
-              
+                      
               param = "FFT#XRC##DLB";   // ReadColor
               
+              param = "FFF#XSC#ff0000#";
+              
+              param = "FF#SYS#LOCK"; // LOCK
+              
+              
+              
+              // HMAC
+              //  param = "FF#SYS#UPDATEKEY01f3573fc481087cd80aa60ed72d6197180712c1a1b318d87fb0a7473566b3919c"; //
+              
+              // ED25519
+              //  param = "FF#SYS#UPDATEKEY02X3wjg+AEDHHTu99/0UYlfkvJVkEPhJjP0y5Aa39Bj34="; //
+               
+              // RSA
+              param = "FF#SYS#UPDATEKEY03PEM|MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArb/fDWScRvlgNj12A22y|GRCjtvSkMxMYRSnaLnEyWbOPVU+EEtV7UVRPEE6ZoDkFOWKJnkN459jGyG+/7hfR|afHKywCi3SGkEGnOg42onpUU6k/j89n1jjQ/KdmY+4zZMmI9TJABU/dXzr8KyjNj|xgUJB3rz6wMwZm4COsLOlXt9+vKSCL8++zaa19Eno0PjavEQ2lFUBHUm1QJoSRR6|X3Lk4tPBKJqac7U6dzZwGPL40qsZ6Xw51wJDEtRyYpBluzwC4yceuWwHU3D8utAy|Uqh19i5DdniAym1z9xPN11e+SfZ9l3CQiaGrwxwG8rz2qvh5eYmnyE/BsUxaubzH|sQIDAQAB"; //
+               
+              param = this.sign( param );               
               
               cmd = "{ \"cmd\":\"push\", \"param\":\""+param+"\" }\n";
+              
+              // Set current signature to new setting
+              this.config.signature_type = "RSA";
+              this.config.private_key_or_secret = "PEM|MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCtv98NZJxG+WA2|PXYDbbIZEKO29KQzExhFKdoucTJZs49VT4QS1XtRVE8QTpmgOQU5YomeQ3jn2MbI|b7/uF9Fp8crLAKLdIaQQac6DjaielRTqT+Pz2fWOND8p2Zj7jNkyYj1MkAFT91fO|vwrKM2PGBQkHevPrAzBmbgI6ws6Ve3368pIIvz77NprX0SejQ+Nq8RDaUVQEdSbV|AmhJFHpfcuTi08EomppztTp3NnAY8vjSqxnpfDnXAkMS1HJikGW7PALjJx65bAdT|cPy60DJSqHX2LkN2eIDKbXP3E83XV75J9n2XcJCJoavDHAbyvPaq+Hl5iafIT8Gx|TFq5vMexAgMBAAECggEAJQCYuxxzH7ZaJBMAwAgrhqUBiKQfF/V4FLquCXf39hyE|aPGvOeeXBKIE2H80vmeGUktG7ZqG9DE5XFRYNpeB9KMWwhbXmGpiq1AtN90CTQuI|0cHD1RnU7rz3uqzppKDBXLaJQXXlooEphREwdhFtrS1DWAF6UtFyDE5fUS5Nmo3A|knxIEMcMfK0tOqt9ZEwpYZc67fZYrkYaazbQ13aJs5Hoa4r6C/PrWXtdM2Tw8a3w|WKmH92dqeHlvCfg2Ug5L5zmZz8wWfOHvyyqzczweewiFRIk0S1uGGW2Q1+mOohEw|CfFpyQCgmCS6LeXtWMi9WPNtkc6UsU8E5NHhUqM0xQKBgQDwfvk1yAYVNWe5btAd|ut2+QtPNTwiut4zyaGoBL3c5IeNDW5czocQt1c6ZoZDL/MszFuIjW2nbu0OHFvS3|O1tK2MjEOOCPltL3ZAX1vSnhe2VWxA8HUrvO9QWO7k6fqP64Id6XBFVkV9YzXCQI|XlFwKlOaLlqj0BITSVaQd2/8CwKBgQC481jIsKBEphnT7nv7/XbAJs0CASBa0gA9|DrdmV8lwFYcMDPYNs8a3yyM8eKZ10lSsWv8K0vnPVfuaJ1u8gWuxE/uZUpWI5j6p|BB3/aq7G1R28OJaNlhplVG5BHvTu3wWMJJTs0leLMTOzyEV3fvCc52HJKzqinLN4|X5T6ZbokswKBgBWXkNBfUQx+av2fEVhZ+qamYVXBjsoA+MqazUml9VJP1JOrmXut|PmvPEmmAs/tcivHfUBZUksCDo6BxUy9QSPYDWKMlaCP8KpzDgjV58lSoO4T6vU6v|AuWl4gXfJ3f2OEhX4iA052XG7RhXYXTO4wjrA+6H0uN6PuU0ZG08C/XZAoGAdFN6|UB/nbcYbEJU7Hi85dXnyD4St2PGkfMK4z4H/jKO9oPK1/8BHCGqX6vznlcuIvi8t|op03yhSGf1qp9FJibann4XNz4fsPBjc0tuVesGhyn2PoLX1vdLQ59HOIEoXrc02+|7YUO0tlLb5RTPOl2ZPmTI3gxFP4CU3+qsCMzhMkCgYBEyT13L2kXnaP5PpmcIB04|GGfwAnHkzKVpYcp/7DWZHsyin+dRn7+D4PSZbLTqsGCufhx+vK4tIU/d4wM6GfL4|zZDIOGujOGkrc2axY+yhyJ+/2hw4hJGD2bs+8JoXFZgG7nsd0u9EvVuq0QiueJBT|9BYdXPvO8L923ocNgB3I1A==";
               
              
               }
@@ -355,10 +458,9 @@ this.client.connect( this.PORT, this.HOST, () => {
            
            if (input == "scanstep")
               {              
-              
-//              console.log("Scanstep... vorbereitung");
-              
+           
               this.scan_step();
+              
               }
            else   
                       
@@ -2384,6 +2486,8 @@ if (this.masterbot_first_scan == 1)
                            stl_id: stl_id,
                            };
   
+  
+   cmd = this.sign( cmd );  
    
    let mb_cmd = "{ \"cmd\":\"push\", \"param\":\""+cmd+"\" }\n";                                         
    this.client.write(mb_cmd);
@@ -2474,6 +2578,7 @@ if (this.masterbot_first_scan == 1)
                                                         };
   
         
+                         cmd = this.sign( cmd );  
    
                          let cellbot_cmd = "{ \"cmd\":\"push\", \"param\":\""+cmd+"\" }\n";                                         
 
@@ -2706,7 +2811,9 @@ const slotnames = ['f','r','b','l','t','d'];
  
         if (nextcmd != undefined)
            {
-                       
+            
+            
+           nextcmd = this.sign( nextcmd );            
               
            cmd = "{ \"cmd\":\"push\", \"param\":\""+nextcmd+"\" }\n";
               
@@ -2825,8 +2932,11 @@ wss.on('connection', (ws) => {
         if (decodedobject.cmd === 'gui_command') 
            {  
            console.log( "gui_command: " + decodedobject.value);
+            
+           let param = this.sign( decodedobject.value );
+                  
+           let cmd = "{ \"cmd\":\"push\", \"param\":\""+param+"\" }\n";
            
-           let cmd = "{ \"cmd\":\"push\", \"param\":\"" +decodedobject.value+ "\" }\n";
            this.client.write(cmd);
               
               

@@ -1,6 +1,6 @@
 //
 // cmd_parser_class.js — Sven Pohl <sven.pohl@zen-systems.de> — MIT License © 2025
-// subversion: 1.1
+// cmd_parser_class v2.1
 //
 
 class cmd_parser 
@@ -28,11 +28,22 @@ this.CMD_CHECK  = 12;
 this.CMD_RCHECK = 13;
 this.CMD_ALIFE  = 14;
 this.CMD_RALIFE = 15;
-
+this.CMD_SYS    = 16;
 
 } // constructor()
 
  
+
+
+split_first(text, separator) {
+  const index = text.indexOf(separator);
+  if (index === -1) {
+    return [text, null]; // Separator not found
+  }
+  const part1 = text.slice(0, index);
+  const part2 = text.slice(index + separator.length);
+  return [part1, part2];
+} 
 
 //
 // Parse CMD
@@ -41,24 +52,28 @@ parse( cmd )
 {
 let ret        = [];
 
-let botcmd      =  "";
-let cmdname     =  "";
-let cmdnext     =  "";
-let sourceslot  =  ""; 
-let cmdstring   =  "";
-let destination =  "";
-let destreturn  =  "";
-let color       =  "";
-let botid       =  "";
-let bottmpid    =  "";
-let type        =  "";
-let vx          = 0;
-let vy          = 0;
-let vz          = 0;
-let destslot    =  "";
-let rawcmd      =  "";
-let status      =  "";
-let subcmd      = [];
+let botcmd      		 =  "";
+let cmdname     		 =  "";
+let cmdnext     		 =  "";
+let sourceslot  		 =  ""; 
+let cmdstring   		 =  "";
+let destination 		 =  "";
+let destreturn  		 =  "";
+let color       		 =  "";
+let botid       		 =  "";
+let bottmpid    		 =  "";
+let type        		 =  "";
+let vx          		 = 0;
+let vy          		 = 0;
+let vz          		 = 0;
+let destslot    		 =  "";
+let rawcmd      		 =  "";
+let status      		 =  "";
+let subcmd      		 = [];
+let signature_type       = "";
+let public_signature     = "";
+let sign_message         = "";
+
 
 
 const trimmed = cmd.split('*');
@@ -75,6 +90,34 @@ if (cnt == 1)
      cmdstring  = trimmed[1];
      }
   
+ 
+ 
+// 
+// signatur - parsing
+//
+let trailer = cmdstring.substring(0,2);
+
+if ( 
+    trailer == "01" ||    
+    trailer == "02" || 
+    trailer == "03" 
+   )
+   {
+   if ( trailer == "01" ) signature_type       = "HMAC";
+   if ( trailer == "02" ) signature_type       = "ED25519";
+   if ( trailer == "03" ) signature_type       = "RSA";
+
+   let sig     = cmdstring.substring(2);
+   
+   const [part1, part2]= this.split_first( sig, '@' );
+   
+   public_signature = part1;
+   
+   cmdstring = part2;
+   sign_message = cmdstring.substring(1);
+   } // if "signature"
+
+
   
 
 const trimmedcmd = cmdstring.split('#');
@@ -149,9 +192,7 @@ if (trimmedcmd[1] == "RINFO")
    vx = vectorarray[0];
    vy = vectorarray[1];
    vz = vectorarray[2];
-   
-   
-   
+         
    } // RINFO
 
 
@@ -286,9 +327,22 @@ if (trimmedcmd[1] == "MOVE")
           let subcmd_tmp =  { sub: "ALIFE" } ;
           subcmd.push( subcmd_tmp );
           } // ALIFE          
+   
+   
+       //      
+       // NONCE
+       //
+       if ( sub == "NONCE" ) 
+          {                  
+          let nonce = trimmed2[i+1];
+                    
+          let subcmd_tmp =  { sub: "NONCE", val: nonce } ;
+          subcmd.push( subcmd_tmp );
+          } // ALIFE          
           
               
        } // for i...
+   
    
   
    } // MOVE
@@ -348,17 +402,62 @@ if (trimmedcmd[1] == "RCHECK")
    } // RCHECK
    
    
- 
- if ( trimmedcmd != "undefined" &&  trimmedcmd[1][0] == "X")
+   
+//   
+// SYS
+//    
+if (trimmedcmd[1] == "SYS")
    {
    
-   botcmd       = trimmedcmd[1];
-   cmdname      = "CUSTOM";
+   botcmd       = this.CMD_SYS;
+   cmdname      = "SYS";
    destination  = trimmedcmd[0];
-   rawcmd       = trimmedcmd[2];
-   destreturn   = trimmedcmd[3];
+   
+   
+   let subcmdarray = trimmedcmd[2].split(';');
       
-   } // 'X'
+   let subcmd2       = subcmdarray[0];   
+   
+
+   if (subcmd2.startsWith("LOCK")) 
+      {
+      let slotparam = subcmd2.substring(4);  
+      
+      let slotarray = slotparam.split('');
+      
+      let subcmd_tmp =  { sub: "LOCK", slots: slotarray  } ;
+
+      subcmd.push( subcmd_tmp );          
+      } // LOCK
+
+
+   if (subcmd2.startsWith("UPDATEKEY")) 
+      {
+      let sigtype = subcmd2.substring(9,11);  
+      
+      let newsig  = subcmd2.substring(11);  
+             
+      let subcmd_tmp =  { sub: "UPDATEKEY", type: sigtype, newsig: newsig  } ;
+
+      subcmd.push( subcmd_tmp );          
+      } // UPDATEKEY
+
+
+ 
+   } // SYS
+   
+   
+ 
+ if ( trimmedcmd != "undefined" &&  trimmedcmd[1][0] == "X")
+    {
+   
+    botcmd       = trimmedcmd[1];
+    cmdname      = "CUSTOM";
+    destination  = trimmedcmd[0];
+    rawcmd       = trimmedcmd[2];
+    destreturn   = trimmedcmd[3];
+      
+    } // 'X'
    
 
 
@@ -370,6 +469,11 @@ destslot = destination.charAt(0).toLowerCase();
 if (destslot != "")
    {
    cmdnext = cmdstring.substring(1);  
+   
+   if ( signature_type != "" )
+      {
+      cmdnext = trailer + public_signature + "@" + cmdnext; 
+      } // if ( signature_type != "" )
    
    } else
      {
@@ -398,16 +502,24 @@ ret['vz']            = vz;
 
 ret['subcmd']        = subcmd;
 
- 
+ret['signature_type']     = signature_type;
+ret['public_signature']   = public_signature;
+ret['sign_message']       = sign_message;
 
  
 
 
-if (trimmedcmd[1] == "RINFO" || trimmedcmd[1] == "RALIFE")
+if ( trimmedcmd[1] == "SYS" ||  trimmedcmd[1] == "MOVE"  || trimmedcmd[1] == "XSC" )
    {
-   //console.log("parser log:");
-   //console.log(ret);
+   
+   // console.log("parser log:");
+   // console.log(ret);
+   // console.log(JSON.stringify(ret, null, 2));
+   
    }
+ 
+
+
 
 return(ret)
 } // parse

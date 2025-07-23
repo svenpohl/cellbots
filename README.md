@@ -56,14 +56,30 @@ structures.
 
 ## 🧩 Version
 
-Current version: **1.0**
+Current version: **1.1**
 
 ---
 
+
 ## 📝 Changelog
+
+- **1.1** (23.07.2025):  
+  – MasterBot can now sign messages using **HMAC**, **ED25519**, or **RSA** (configurable)  
+  – Added `SYS#LOCK` command to selectively disable CellBot communication slots  
+  – Added `SYS#UPDATEKEY` command to securely update shared secrets or public keys at runtime  
+  – The `MOVE` command now supports a `NONCE;(number)` subcommand as preparation for replay protection (not yet active in ClusterSim)
+
+
 
 - **1.0** (19.07.2025): First MVP released
 
+  ✅ First MVP released  
+  – Core modules: ClusterSim, BotController, Frontends  
+  – Movement system with `MOVE` OP-code and anchors  
+  – Quaternion-based rotation, morphing logic, replay system  
+  – Basic communication via OP-code messages  
+  – Export to Blender and logging support
+  
 ---
 
 ## 🚧 Planned Features
@@ -94,4 +110,13 @@ If you enjoy this project and want to support ongoing development, feel free to 
 
 > *"If you’d like to say thanks: Even a few sats are appreciated!"*
 
-Thank you! 🙏
+🙏 Thank you!
+
+---
+
+📬 **Feedback welcome**  
+If you're experimenting with CellBots or building something on top of it, I'd love to hear from you.  
+Even a short message helps with motivation and future planning.
+
+Feel free to drop a quick note to:  
+`sven.pohl@zen-systems.de`

@@ -5,7 +5,8 @@
 const cmd_parser_class = require('./cmd_parser_class');  
 
 const Logger = require('./logger');  
-  
+
+const signature_class = require('./signature_class');   
 
 //
 // Bot class
@@ -43,6 +44,7 @@ constructor()
   this.index_neighbors['t'] = -1;
   this.index_neighbors['d'] = -1;
   
+  this.locked        = [];
   
   //this.max_msgqueue = 5;
   this.max_msgqueue = 500;
@@ -53,6 +55,12 @@ constructor()
   
   this.physical_bot_move_delay = 0;
   
+  this.enable_signing       = false;
+  this.signature_type       = "";
+  this.public_key_or_secret = "";
+  
+  this.signature_class_obj = new signature_class( );
+  
   } // constructor
   
   
@@ -61,7 +69,11 @@ constructor()
 //
 // setvalues()
 //  
-setvalues( id, x,y,z, vx,vy,vz, inactive = 0, color, physical_bot_move_delay)
+setvalues( id, x,y,z, vx,vy,vz, inactive = 0, color, physical_bot_move_delay,                           
+           enable_signing,
+           signature_type,
+           public_key_or_secret
+)
 {
 this.id = id;
 this.x = x;
@@ -77,7 +89,11 @@ this.inactive = inactive;
 this.color = color;
 
 this.physical_bot_move_delay = physical_bot_move_delay;
- 
+
+this.enable_signing       = enable_signing;
+this.signature_type       = signature_type;
+this.public_key_or_secret = public_key_or_secret;
+
 } // setvalues()
 
 
@@ -138,6 +154,67 @@ async run_cmd( cmdarray, caller )
 {
 let destination = null;
 let destreturn  = null;
+
+
+// -> Reject all from locked slots
+let tmp_sourceslot  = cmdarray.sourceslot.toUpperCase();
+  
+if ( this.locked.includes( tmp_sourceslot ) ) 
+   {
+   // console.log('Reject from slot ' + tmp_sourceslot);
+   return (false);
+   }
+// <- lock check
+
+
+
+ 
+// -> signature check
+let signature_check = true;
+
+if (this.enable_signing == "true")
+   {
+   signature_check = false;
+
+   if ( cmdarray.signature_type != this.signature_type)  signature_check = false;
+   
+   if ( this.signature_type == "HMAC" )
+      {
+      let sigtype = this.signature_class_obj.SIG_HMAC;
+      
+      signature_check = this.signature_class_obj.verifyMessage( sigtype, cmdarray['sign_message'], cmdarray['public_signature'], this.public_key_or_secret );             
+      } // HMAC
+      
+
+   if ( this.signature_type == "ED25519" )
+      {
+      let sigtype = this.signature_class_obj.SIG_ED25519;
+
+      signature_check = this.signature_class_obj.verifyMessage( sigtype, cmdarray['sign_message'], cmdarray['public_signature'], this.public_key_or_secret );
+      } // ED25519
+   
+   
+   if ( this.signature_type == "RSA" )
+      {
+      let sigtype = this.signature_class_obj.SIG_RSA;
+      
+      let public_key = this.signature_class_obj.restorePEM( this.public_key_or_secret , "PUBLIC KEY");      
+      
+      signature_check = this.signature_class_obj.verifyMessage( sigtype, cmdarray['sign_message'], cmdarray['public_signature'], public_key);             
+      } // RSA
+      
+     
+   } // if (this.enable_signing == "true")
+  
+  
+if (signature_check != true)
+   {
+   console.log("WRONG SIGNATURE")
+   return;
+   }  
+// <-
+ 
+ 
 
 if ( cmdarray.cmd == this.cmd_parser_class_obj.CMD_PING )
    {
@@ -334,6 +411,39 @@ if ( cmdarray.cmd == this.cmd_parser_class_obj.CMD_MOVE )
    
    
    
+   
+// SYS
+if ( cmdarray.cmd == this.cmd_parser_class_obj.CMD_SYS )
+   {   
+   let size = cmdarray.subcmd.length;
+   for (let i=0; i<size; i++)
+       {
+       let sub    = cmdarray.subcmd[i].sub;       
+       
+       if (sub == "LOCK")
+          {          
+          this.locked  = cmdarray.subcmd[i].slots;
+        
+          } // sub == LOCK
+
+       if (sub == "UPDATEKEY")
+          {
+                    
+          if ( cmdarray.subcmd[i].type == "01" ) this.signature_type = "HMAC";
+          if ( cmdarray.subcmd[i].type == "02" ) this.signature_type = "ED25519";
+          if ( cmdarray.subcmd[i].type == "03" ) this.signature_type = "RSA";
+
+          this.public_key_or_secret = cmdarray.subcmd[i].newsig;
+
+          } // sub == LOCK
+
+          
+       }
+       
+   } // CMD_SYS
+       
+      
+   
 
 
 // Custom-Command
@@ -369,7 +479,7 @@ if ( cmdarray.cmd[0] == 'X' )
       // Execute command
       let cmdreturn = destreturn + "#XRRC#" + this.id + ";"  +  this.color + "";
    
-      console.log("cmdreturn: " + cmdreturn );
+      // console.log("cmdreturn: " + cmdreturn );
    
       this.push_msg( cmdreturn );
 

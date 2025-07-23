@@ -228,8 +228,24 @@ const xml2js = require('xml2js');
                            cell.pos[0].vz[0],
                            cell.inactive,
                            cell.pos[0].col[0],
-                           this.config.physical_bot_move_delay 
+                           this.config.physical_bot_move_delay,
+                           
+                           this.config.enable_signing, 
+                           this.config.signature_type, 
+                           this.config.public_key_or_secret
+                                                  
                            );
+                           
+                           /*
+                           # Sigining
+enable_signing  = true
+signature_type  = HMAC 
+#signature_type  = ED25519 
+#signature_type  = RSA 
+public_key_or_secret = c25f5d256a3a0104c9eabab81f6d87abc2f9f75179101de2f527de535f2b1fb3
+private_key_or_secret = c25f5d256a3a0104c9eabab81f6d87abc2f9f75179101de2f527de535f2b1fb3
+ 
+                           */
 
     this.bots.push( bot_class_obj ); 
         
@@ -707,21 +723,34 @@ console.log("---------");
 //
 // loadConfig()
 // 
-loadConfig(filePath) {
+loadconfig(filePath) {
   const configData = fs.readFileSync(filePath, 'utf-8');
   const config = {};
 
   configData.split('\n').forEach(line => {
-    const [key, value] = line.split('=');
-    if (key && value) {
+    const [key, value] = this.split_first(line.trim(), '=');
+    if (key && value !== null) {
       config[key.trim()] = value.trim();
     }
   });
 
   // Add config to global space
   this.config = config;
+  
   return config;
-}  
+}
+
+
+split_first(text, separator) {
+  const index = text.indexOf(separator);
+  if (index === -1) {
+    return [text, null]; // Separator not found
+  }
+  const part1 = text.slice(0, index);
+  const part2 = text.slice(index + separator.length);
+  return [part1, part2];
+}
+
 
 
 
@@ -1208,7 +1237,12 @@ for (let i=0; i < l; i++)
        let destslot    = msgarray['destslot'];
        let cmdnext     = msgarray['cmdnext'];
    
-       // Routing message
+      
+       
+       
+   
+   
+       // Routing message 
        if (destslot != "")
           {
 
@@ -1235,8 +1269,47 @@ for (let i=0; i < l; i++)
              } // if ( slot_inbound != "")            
 
 
-        
-          this.bots[tmp_botindex].push_msg( cmdnext );
+         
+          
+          
+
+ 
+
+          // Add zu bot-message queue if slot is not locked! 
+          // Reject locked ingoing and outgoing slots
+          let LOCKED = false;
+          
+          if ( slot_inbound != "")
+             {            
+             // console.log("LOCK - TEST ("+ this.bots[tmp_botindex].id+") inbound:" + slot_inbound+  " destslot: " + destslot );
+             if ( 
+                this.bots[tmp_botindex].locked.includes( slot_inbound.toUpperCase() )                 
+                )               
+                {
+                // console.log("IN-LOCK FOR BOT " + this.bots[tmp_botindex].id );
+                LOCKED = true;
+                }
+
+
+             let out_slot = msgarray['cmdnext'][0];
+             // console.log("out_slot: " + out_slot);
+             if (               
+                this.bots[tmp_botindex].locked.includes( out_slot.toUpperCase() ) 
+                )               
+                {
+                // console.log("OUT-LOCK FOR BOT " + this.bots[tmp_botindex].id );
+                LOCKED = true;
+                }
+
+
+             }
+                           
+          if (!LOCKED)
+             {
+             this.bots[tmp_botindex].push_msg( cmdnext );
+             }
+             
+             
           } // if (tmp_botindex != null)
 
           

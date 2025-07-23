@@ -43,7 +43,7 @@ masterbot_class_obj = new masterbot_class();
 
 // Load config.cfg
 const configPath = path.join(__dirname, 'config.cfg');
-const config = masterbot_class_obj.loadConfig(configPath);
+const config = masterbot_class_obj.loadconfig(configPath);
 
 await masterbot_class_obj.init("constructs/" + config.construct);
 
@@ -122,6 +122,8 @@ const server = net.createServer((socket) => {
         
         case 'push':                     
             param = decodedobject.param;
+            
+            //console.log(param);
                 
             let ret = masterbot_class_obj.push_msg( param );       
         break;
