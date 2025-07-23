@@ -18,16 +18,17 @@ Illustration: Each CellBot has six available slots—one for each spatial direct
 
 # CellBot Commands – Table of Contents
 
-1. [INFO](#1-command-info)
-2. [RINFO](#2-command-rinfo)
-3. [CHECK](#3-command-check)
-4. [RCHECK](#4-command-rcheck)
-5. [MOVE](#5-command-move)
-6. [RALIFE](#6-command-ralife)
-7. [SYS](#7-command-sys)
-8. [X-Custom Command](#8-command-x-custom-command)
-9. [Signature Mode & Message Authentication](signature-mode--message-authentication)
+1. [INFO](#1-command-info)  
+2. [RINFO](#2-command-rinfo)  
+3. [CHECK](#3-command-check)  
+4. [RCHECK](#4-command-rcheck)  
+5. [MOVE](#5-command-move)  
+6. [RALIFE](#6-command-ralife)  
+7. [SYS](#7-command-sys)  
+8. [X-Custom Command](#8-command-x-custom-command)  
+9. [Signature Mode & Message Authentication](#signature-mode--message-authentication)  
 10. [Logging](#logging)
+
 
 ## 1. Command: INFO
 
