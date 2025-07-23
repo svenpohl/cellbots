@@ -26,7 +26,7 @@ Illustration: Each CellBot has six available slots—one for each spatial direct
 6. [RALIFE](#6-command-ralife)
 7. [SYS](#7-command-sys)
 8. [X-Custom Command](#7-command-x-custom-command)
-   [Signature Mode & Message Authentication](#9-signature-mode--message-authentication)  
+   [Signature Mode & Message Authentication](signature-mode--message-authentication)  
    [Logging](#logging)
 
 ## 1. Command: INFO
