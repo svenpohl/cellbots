@@ -222,6 +222,16 @@ This can be used to block access to certain faces (e.g., outer walls) to prevent
   ```
   → Unlocks all previously locked slots on bot `FF`.
 
+- Lock with replay protection (using NONCE):
+  ```
+  FF#SYS#LOCKFRL;NONCE;42
+  ```
+  → Same as above, but includes a unique **nonce** value (`42`) for optional replay protection.
+
+> 🛈 **Note:** The `NONCE` field is currently only forwarded (not validated) by the simulator.  
+> It is recommended to include it for future-proof hardware support.
+
+
 
 
 ### 🔸 Subcommand: `UPDATEKEY`
