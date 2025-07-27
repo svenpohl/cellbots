@@ -84,15 +84,11 @@ Current version: **1.1**
 
 ## 🚧 Planned Features
 
-- **MasterBot command signing:**  
-  All control commands from the MasterBot will be cryptographically signed (e.g., RSA/ECDSA or HMAC).  
-  Each CellBot must verify the signature before accepting a command.
+- **Decentralized AntMorph algorithm (planned):**  
+  A lightweight, swarm-based morphing system is in development, inspired by ant behavior.  
+  Bots will attempt to fill free target positions without global coordination, based on local visibility and optional heuristics (e.g., cluster center proximity).  
+  Goal: support fast and distributed formation of arbitrary patterns in constrained environments.
 
-- **Planned:**  
-  Optional self-signing of CellBots for future authentication (not required initially).
-
-- **Goal:**  
-  Ensure authenticity of control commands; signature will always be prepended to the opcode/message.
 
 ---
 
