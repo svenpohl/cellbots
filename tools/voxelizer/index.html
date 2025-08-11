@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Voxelizer – Dual View</title>
+  <style>
+    html, body { height: 100%; margin: 0; background:#3f3f40; color:#e6e6e6; font-family: system-ui, sans-serif; }
+    .ui {
+      position: fixed; top: 12px; left: 12px; z-index: 10;
+      background: rgba(0,0,0,.45); backdrop-filter: blur(6px);
+      padding: 10px 12px; border-radius: 12px;
+    }
+    .ui label { margin-right:8px; opacity:.9; }
+    .ui input[type="number"] { width: 60px; margin-left: 4px; }
+
+    #split {
+      position: fixed; inset: 0;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    }
+    .pane { position: relative; }
+    canvas { display:block; width:100%; height:100%; }
+    .label {
+      position: absolute; top: 10px; left: 12px; padding: 4px 8px; border-radius: 8px;
+      background: rgba(0,0,0,.35); font-size: 12px; letter-spacing: .3px; opacity:.85;
+      user-select: none; pointer-events: none;
+    }
+    .divider {
+      position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+      background: #000; pointer-events: none; z-index: 5;
+    }
+    
+    
+    .topstats {
+      position: fixed; top:12px; right:12px; z-index:11;
+      background: rgba(0,0,0,.45); backdrop-filter: blur(6px);
+      padding:10px 12px; border-radius:12px; font: 13px/1.2 system-ui,sans-serif;
+    }
+
+    .topstats b{opacity:.9}
+    
+    .topstats span{margin-left:6px}
+
+    .footer-link {
+     position: fixed;
+     bottom: 12px;
+     right: 12px;
+     z-index: 12;
+     background: rgba(0,0,0,.45);
+     backdrop-filter: blur(6px);
+     padding: 6px 10px;
+     border-radius: 8px;
+     font-size: 12px;
+     }
+
+    .footer-link a {
+     color: #8cf;
+     text-decoration: none;
+     }
+  
+    .footer-link a:hover {
+     text-decoration: underline;
+     }
+     
+    .ui .button-group {
+     display: flex;
+     gap: 8px;           /* gleichmäßiger Abstand */
+     margin-top: 8px;    /* Abstand nach oben */
+     }
+
+    .ui .button-group button {
+     flex: 1;            /* alle gleich breit */
+     padding: 6px 10px;
+     border: 1px solid #555;
+     background: #2a2a2a;
+     color: #e6e6e6;
+     border-radius: 6px;
+     cursor: pointer;
+     transition: background 0.15s ease, transform 0.08s ease;
+     }
+
+    .ui .button-group button:hover {
+     background: #3a3a3a;
+     }
+
+    .ui .button-group button:active {
+     transform: translateY(1px);
+     }
+     
+  </style>
+</head
+>
+<body>
+  <div class="ui">
+
+    <label>load GLB:</label>
+    <button id="loadLocal">/assets/test.glb</button>
+    <input id="file" type="file" accept=".glb,.gltf" />
+
+    <div style="margin-top:8px;">
+      <label for="gridSize">Grid Size:</label>
+      <input type="number" id="gridSize" value="10" min="1" step="1">
+      <button id="changeGrid">Change Grid</button>
+    </div>
+        
+     <div class="button-group">
+       <button id="btnVoxelize">Voxelize</button>
+       <button id="btnShellextraction">Shell extraction</button>
+       <button id="btnExport">Export JSON</button>
+     </div>
+
+  </div>
+  
+  
+  
+ <div class="topstats" id="topstats">
+   <div><b>Total voxels:</b> <span id="statsTotal">0</span></div>
+   <div><b>Processed:</b> <span id="statsDone">0</span></div>
+   <div><b>Progress:</b> <span id="statsPercent">0%</span></div>
+   <div><b>ETA:</b> <span id="statsEta">–:–</span></div>
+ </div>
+
+
+
+  <div id="split">
+    <div class="pane" id="paneL"><div class="label">Original</div></div>
+    <div class="pane" id="paneR"><div class="label">Voxel view</div></div>
+    <div class="divider"></div>
+  </div>
+
+  <!-- Local ThreeJS-Builds -->
+  <script src="js/three.min.js"></script>
+  <script src="js/GLTFLoader.js"></script>
+
+<script>
+  
+  
+const LEFT_GRID_Y = -5;  
+
+
+
+// ------- Helpers for Grid-Walls (only left)
+function setGridLook(g, opacity = 0.35) 
+{
+      [g.material, g.material2].forEach(m => {
+        if (m) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+      });
+} // setGridLook
+  
+
+
+// ------- Helpers for Grid-Walls (only left)
+function setGridLook(g, opacity = 0.35) {
+  // Apply transparent look to both materials of a grid helper (if present)
+  [g.material, g.material2].forEach((m) => {
+    if (m) {
+      m.transparent = true;
+      m.opacity = opacity;
+      m.depthWrite = false;
+    }
+  });
+} // setGridLook()
+
+
+function buildRoomForLeft(view) {
+  // Dispose and remove old walls from the left view
+  [view.leftWall, view.backWall].forEach((w) => {
+    if (w) {
+      view.scene.remove(w);
+      w.geometry.dispose();
+      w.material.dispose();
+    }
+  });
+  view.leftWall = view.backWall = null;
+
+  const size = view.gridSize ?? 10;   // Room edge length
+  const divisions = size;             // Same cell count as GridHelper
+  const half = size / 2;
+  const step = size / divisions;
+  const y0 = 0, y1 = size;            // Floor (y0) to ceiling (y1)
+
+  const mat = new THREE.LineBasicMaterial({
+    color: 0x888888,
+    transparent: true,
+    opacity: 0.5,
+  });
+
+  // ---- Left wall (x = -half), spanning y = 0..size ----
+  {
+    const pts = [];
+    // Horizontal lines (along Z)
+    for (let i = 0; i <= divisions; i++) {
+      const y = y0 + i * step;
+      pts.push(new THREE.Vector3(-half, y, -half));
+      pts.push(new THREE.Vector3(-half, y,  half));
+    }
+    // Vertical lines (along Y)
+    for (let i = 0; i <= divisions; i++) {
+      const z = -half + i * step;
+      pts.push(new THREE.Vector3(-half, y0, z));
+      pts.push(new THREE.Vector3(-half, y1, z));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    view.leftWall = new THREE.LineSegments(geo, mat.clone());
+    view.scene.add(view.leftWall);
+  }
+
+  // ---- Back wall (z = -half), spanning y = 0..size ----
+  {
+    const pts = [];
+    // Horizontal lines (along X)
+    for (let i = 0; i <= divisions; i++) {
+      const y = y0 + i * step;
+      pts.push(new THREE.Vector3(-half, y, -half));
+      pts.push(new THREE.Vector3( half, y, -half));
+    }
+    // Vertical lines (along Y)
+    for (let i = 0; i <= divisions; i++) {
+      const x = -half + i * step;
+      pts.push(new THREE.Vector3(x, y0, -half));
+      pts.push(new THREE.Vector3(x, y1, -half));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    view.backWall = new THREE.LineSegments(geo, mat.clone());
+    view.scene.add(view.backWall);
+  }
+} // buildRoomForLeft()
+
+
+function applyLeftGroundOffset() {
+  // Lower the grid and move the walls by the same offset
+  if (viewL.grid) viewL.grid.position.y = LEFT_GRID_Y;
+  if (viewL.leftWall) viewL.leftWall.position.y = LEFT_GRID_Y;
+  if (viewL.backWall) viewL.backWall.position.y = LEFT_GRID_Y;
+} // applyLeftGroundOffset()
+
+
+// ------- View-Factory
+function makeView(container) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x3f3f40);
+
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 1000);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  dir.position.set(5, 10, 5);
+  scene.add(dir);
+
+  const defaultGridSize = 10;
+  const grid = new THREE.GridHelper(defaultGridSize, defaultGridSize, 0x333333, 0x222222);
+  scene.add(grid);
+
+  const state = {
+    target: new THREE.Vector3(0, 0, 0),
+    distance: 5,
+    azimuth: 0.9,
+    elevation: 0.5,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+  };
+
+  function updateCam() {
+    const { target, distance, azimuth, elevation } = state;
+    const x = target.x + distance * Math.cos(elevation) * Math.cos(azimuth);
+    const y = target.y + distance * Math.sin(elevation);
+    const z = target.z + distance * Math.cos(elevation) * Math.sin(azimuth);
+    camera.position.set(x, y, z);
+    camera.lookAt(target);
+  }
+  updateCam();
+
+  // Basic drag orbit
+  container.addEventListener('mousedown', (e) => {
+    state.dragging = true;
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+  });
+  window.addEventListener('mouseup', () => (state.dragging = false));
+  window.addEventListener('mousemove', (e) => {
+    if (!state.dragging) return;
+    const dx = e.clientX - state.lastX;
+    const dy = e.clientY - state.lastY;
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+    state.azimuth -= dx * 0.005;
+    state.elevation -= dy * 0.005;
+    const EPS = 0.001;
+    state.elevation = Math.max(-Math.PI / 2 + EPS, Math.min(Math.PI / 2 - EPS, state.elevation));
+    updateCam();
+  });
+
+  function resize() {
+    const rect = container.getBoundingClientRect();
+    renderer.setSize(rect.width, rect.height, false);
+    camera.aspect = rect.width / rect.height;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+
+  return { renderer, scene, camera, state, updateCam, resize, container, grid, gridSize: defaultGridSize };
+} // makeView()
+
+
+// ------- Two views
+const viewL = makeView(document.getElementById('paneL'));
+const viewR = makeView(document.getElementById('paneR'));
+buildRoomForLeft(viewL); // set walls (outside of makeView)
+
+applyLeftGroundOffset();
+
+// ------- Grid UI
+document.getElementById('changeGrid').addEventListener('click', () => {
+  const val = parseInt(document.getElementById('gridSize').value, 10);
+  if (isNaN(val) || val < 1) return;
+
+  [viewL, viewR].forEach((view) => {
+    view.scene.remove(view.grid);
+    view.grid.geometry.dispose();
+    view.grid.material.dispose();
+    view.grid = new THREE.GridHelper(val, val, 0x333333, 0x222222);
+    view.scene.add(view.grid);
+    view.gridSize = val;
+  });
+
+  buildRoomForLeft(viewL);                 // rebuild walls to new size
+  applyLeftGroundOffset();                 // re-apply ground offset
+
+  if (currentL) {
+    // Re-fit object to the updated grid
+    fitObjectToGrid(viewL, currentL, { padding: 0.95, ground: true, groundOffset: LEFT_GRID_Y });
+  }
+}); // changeGrid click handler
+
+
+// ------- Active View (mouseover) + zoom
+let activeView = viewL;
+viewL.container.addEventListener('mouseenter', () => (activeView = viewL));
+viewR.container.addEventListener('mouseenter', () => (activeView = viewR));
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (!activeView) return;
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const k = 0.0012;
+    activeView.state.distance *= Math.exp(dy * k);
+    const minD = activeView.state.zoomMin ?? 0.2;
+    const maxD = activeView.state.zoomMax ?? 200;
+    activeView.state.distance = Math.max(minD, Math.min(maxD, activeView.state.distance));
+    activeView.updateCam();
+  },
+  { passive: true }
+); // wheel zoom
+
+
+function fitObjectToGrid(view, object, { padding = 0.95, ground = true, groundOffset = 0 } = {}) {
+  // Cache a baseline transform snapshot once
+  if (!object.userData.fitBase) {
+    object.updateMatrixWorld(true);
+    const box0 = new THREE.Box3().setFromObject(object);
+    const size0 = box0.getSize(new THREE.Vector3());
+    object.userData.fitBase = {
+      pos: object.position.clone(),
+      scale: object.scale.clone(),
+      rot: object.rotation.clone(),
+      baseMaxDim: Math.max(size0.x, size0.y, size0.z) || 1,
+    };
+  }
+  const base = object.userData.fitBase;
+
+  // Target size based on grid
+  const gridSize = view.gridSize ?? 10;
+  const target = gridSize * padding;
+  const s = target / base.baseMaxDim;
+
+  // 1) Reset to baseline
+  object.position.copy(base.pos);
+  object.scale.copy(base.scale);
+  object.rotation.copy(base.rot);
+
+  // 2) Uniform scale
+  object.scale.multiplyScalar(s);
+  object.updateMatrixWorld(true);
+
+  // 3) Center to origin
+  let box = new THREE.Box3().setFromObject(object);
+  const center = box.getCenter(new THREE.Vector3());
+  object.position.sub(center);
+  object.updateMatrixWorld(true);
+
+  // 4) Place on "ground" + offset
+  if (ground) {
+    box = new THREE.Box3().setFromObject(object);
+    object.position.y -= box.min.y; // onto ground
+    if (groundOffset) object.position.y += groundOffset; // apply extra offset
+    object.updateMatrixWorld(true);
+  }
+
+  view.state.target.set(0, 0, 0);
+  view.updateCam();
+} // fitObjectToGrid()
+
+
+viewR.state.target.set(0, 0, 0);
+viewR.state.distance = 3;
+viewR.updateCam();
+viewR.grid.position.y = LEFT_GRID_Y; // or own offset value
+
+
+// ------- Frame left camera on object
+function frameLeftOnObject(obj) {
+  const box = new THREE.Box3().setFromObject(obj);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const r = sphere.radius || 1;
+
+  viewL.state.target.copy(sphere.center);
+  viewL.state.distance = r * 2.0;
+
+  viewL.camera.near = Math.max(r * 0.01, 0.01);
+  viewL.camera.far = Math.max(r * 20, 1000);
+  viewL.camera.updateProjectionMatrix();
+
+  viewL.state.zoomMin = r * 0.1;
+  viewL.state.zoomMax = r * 100;
+
+  viewL.updateCam();
+} // frameLeftOnObject()
+
+
+// ------- Resize handler
+window.addEventListener('resize', () => {
+  viewL.resize();
+  viewR.resize();
+}); // resize listener
+
+
+// ------- Load (left)
+const loader = new THREE.GLTFLoader();
+let currentL = null;
+
+function clearObject(obj) {
+  // Dispose geometry + materials for all meshes in a tree
+  obj?.traverse?.((o) => {
+    if (o.isMesh) {
+      o.geometry?.dispose?.();
+      if (o.material?.map) o.material.map.dispose?.();
+      o.material?.dispose?.();
+    }
+  });
+} // clearObject()
+
+
+// Helper: set all mesh materials to DoubleSide (helps raycasts on interior faces)
+function setMaterialsDoubleSide(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m) continue;
+      m.side = THREE.DoubleSide;
+      m.needsUpdate = true;
+    }
+  });
+} // setMaterialsDoubleSide()
+
+
+async function loadGLB_Left(url) {
+  CURRENT_MODEL_URL = url;
+
+  if (currentL) {
+    viewL.scene.remove(currentL);
+    clearObject(currentL);
+    currentL = null;
+  }
+
+  const gltf = await loader.loadAsync(url);
+  currentL = gltf.scene || gltf.scenes?.[0];
+  viewL.scene.add(currentL);
+
+  // Important for raycasts: ensure interior faces are visible
+  setMaterialsDoubleSide(currentL);
+
+  // Build mesh list for the raycaster (faster than traversing root each time)
+  RAY.meshes = [];
+  currentL.traverse((o) => {
+    if (o.isMesh) RAY.meshes.push(o);
+  });
+
+  // Derive a sensible ray "far" distance from model size
+  const box2 = new THREE.Box3().setFromObject(currentL);
+  const size = box2.getSize(new THREE.Vector3());
+  RAY.maxFar = Math.max(size.x, size.y, size.z) * 2;
+
+  // Fit object into grid (with ground offset on the left view)
+  fitObjectToGrid(viewL, currentL, { padding: 0.95, ground: true, groundOffset: LEFT_GRID_Y });
+
+  // Camera/clipping aligned to the fitted object
+  currentL.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(currentL);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const r = Math.max(1e-6, sphere.radius);
+
+  viewL.state.distance = r * 3.0;
+  viewL.state.zoomMin = r * 0.1;
+  viewL.state.zoomMax = r * 100;
+
+  viewL.camera.near = Math.max(r * 0.01, 0.01);
+  viewL.camera.far = Math.max(r * 20, 1000);
+  viewL.camera.updateProjectionMatrix();
+  viewL.updateCam();
+} // loadGLB_Left()
+
+
+// ---- Voxel-state (right) ----
+const VOX = {
+  centers: [],
+  size: 1,               // 1 grid unit = 1 voxel
+  dims: { nx: 0, ny: 0, nz: 0 },
+  bounds: new THREE.Box3(),
+  group: null,           // THREE.Group containing voxel meshes in the right view
+};
+
+const MAT_VOX_OUT    = new THREE.MeshStandardMaterial({ color: 0x00c853, metalness: 0, roughness: 1, transparent: true, opacity: 0.005 });
+const MAT_VOX_INSIDE = new THREE.MeshStandardMaterial({ color: 0x9999ff, metalness: 0, roughness: 1, transparent: true, opacity: 1.0 });
+const MAT_VOX_INSIDE2 = new THREE.MeshStandardMaterial({ color: 0x22ff00, metalness: 0, roughness: 1, transparent: true, opacity: 1.0 });
+const GEO_VOX        = new THREE.BoxGeometry(1, 1, 1); // VOX.size == 1
+
+let FOUND_VOX = []; // Filled per run
+let GRID_BOUNDS = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
+let GRID_DIMS = { nx: 0, ny: 0, nz: 0 };
+
+let GLOBAL_INSIDE_COUNT = 0;
+
+function clearRightVoxels() {
+  // Remove and dispose right-side voxel meshes
+  if (VOX.group) {
+    VOX.group.traverse((o) => {
+      if (o.isMesh) {
+        o.geometry?.dispose?.();
+        o.material?.dispose?.();
+      }
+    });
+    viewR.scene.remove(VOX.group);
+    VOX.group = null;
+  }
+} // clearRightVoxels()
+
+
+async function do_voxelize() {
+  console.log('Start voxelize');
+
+  FOUND_VOX.length = 0;
+
+  if (!currentL) {
+    console.warn('No model loaded on the left.');
+    return;
+  }
+
+  // --- Phase 1: BBox → VOX.centers ---
+  const box = new THREE.Box3().setFromObject(currentL);
+  VOX.bounds.copy(box);
+
+  const size = viewL.gridSize ?? 10;
+  VOX.size = 1;
+
+  // X/Z centered around 0
+  const minX = Math.max(-size / 2, Math.floor(box.min.x));
+  const maxX = Math.min(size / 2, Math.ceil(box.max.x));
+  const minZ = Math.max(-size / 2, Math.floor(box.min.z));
+  const maxZ = Math.min(size / 2, Math.ceil(box.max.z));
+
+  // Y adapted to the left ground offset
+  const Y0 = typeof LEFT_GRID_Y === 'number' ? LEFT_GRID_Y : 0;
+  const Y1 = Y0 + size;
+  const minY = Math.max(Y0, Math.floor(box.min.y));
+  const maxY = Math.min(Y1, Math.ceil(box.max.y));
+
+  GRID_BOUNDS = { minX, minY, minZ, maxX, maxY, maxZ };
+  GRID_DIMS = { nx: maxX - minX, ny: maxY - minY, nz: maxZ - minZ };
+
+  VOX.centers.length = 0;
+  for (let x = minX; x < maxX; x++) {
+    for (let y = minY; y < maxY; y++) {
+      for (let z = minZ; z < maxZ; z++) {
+        VOX.centers.push(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
+      }
+    }
+  }
+
+  // Prepare right scene
+  clearRightVoxels();
+  VOX.group = new THREE.Group();
+  viewR.scene.add(VOX.group);
+
+  // Frame right camera onto the voxel volume
+  const c = VOX.bounds.getCenter(new THREE.Vector3());
+  viewR.state.target.copy(c);
+  const r = VOX.bounds.getSize(new THREE.Vector3()).length() * 0.7;
+  viewR.state.distance = Math.max(r, 3);
+  viewR.camera.near = Math.max(r * 0.01, 0.01);
+  viewR.camera.far = Math.max(r * 10, 1000);
+  viewR.camera.updateProjectionMatrix();
+  viewR.updateCam();
+
+  // --- Phase 2: Classification (time-sliced + instanced + ETA) ---
+  let idx = 0;
+  let inside = 0,
+    outside = 0;
+  const total = VOX.centers.length;
+
+  // UI init
+  updateProgressUI(0, total, null);
+  let lastPct = -1;
+  let lastUiTs = 0;
+
+  // ETA variables
+  const t0 = performance.now();
+  let emaRate = null;
+  const ALPHA = 0.2;
+
+ 
+
+  const instIn = new THREE.InstancedMesh(GEO_VOX, MAT_VOX_INSIDE, total);
+  instIn.count = 0;
+  instIn.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  VOX.group.add(instIn);
+
+  const dummy = new THREE.Object3D();
+  const FRAME_BUDGET_MS = 12;
+  const UI_THROTTLE_MS = 100;
+
+  function step() {
+    const frameStart = performance.now();
+
+    while (idx < total && performance.now() - frameStart < FRAME_BUDGET_MS) {
+      const p = VOX.centers[idx];
+
+      const { anyZero } = countZeroRaysAt(p, currentL); // inside ⇔ no zero-ray
+      if (!anyZero) {
+        // Integer lattice coordinates (voxel index) from center:
+        const ix = Math.floor(p.x - 0.5);
+        const iy = Math.floor(p.y - 0.5);
+        const iz = Math.floor(p.z - 0.5);
+
+        dummy.position.copy(p);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        instIn.setMatrixAt(instIn.count++, dummy.matrix);
+        inside++;
+
+        FOUND_VOX.push({ ix, iy, iz, x: p.x, y: p.y, z: p.z });
+      } else {
+        outside++;
+      }
+
+      idx++;
+    }
+
+    // Compute ETA & occasionally update UI
+    const now = performance.now();
+    const elapsedSec = (now - t0) / 1000;
+    const instantRate = elapsedSec > 0 ? idx / elapsedSec : 0;
+    emaRate = emaRate == null ? instantRate : (1 - ALPHA) * emaRate + ALPHA * instantRate;
+    const remaining = total - idx;
+    const etaSec = emaRate > 0 ? remaining / emaRate : Infinity;
+
+    if (now - lastUiTs > UI_THROTTLE_MS) {
+      instIn.instanceMatrix.needsUpdate = true;
+      updateProgressUI(idx, total, etaSec);
+      const pct = Math.floor((idx / total) * 100);
+      if (pct !== lastPct) {
+        lastPct = pct;
+        console.log(`voxelize: ${pct}% (${idx}/${total}) ETA ${formatETA(etaSec)} @${emaRate?.toFixed(0)} vx/s`);
+      }
+      lastUiTs = now;
+    }
+
+    if (idx < total) {
+      requestAnimationFrame(step);
+    } else {
+      instIn.instanceMatrix.needsUpdate = true;
+      updateProgressUI(total, total, 0);
+      console.log(`Voxelization done: total ${total}, inside ${inside}, outside ${outside} — ${((performance.now() - t0) / 1000).toFixed(2)}s`);
+      GLOBAL_INSIDE_COUNT = inside;
+      LAST_SHELL = [...FOUND_VOX]; // Default: entire inside set as "shell"
+    }
+  } // step()
+
+  requestAnimationFrame(step);
+} // do_voxelize()
+
+
+// Button event listeners
+document.getElementById('btnVoxelize').addEventListener('click', () => {
+  do_voxelize();
+}); // btnVoxelize
+
+document.getElementById('btnShellextraction').addEventListener('click', () => {
+  do_shellextraction();
+}); // btnShellextraction
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  export_json();
+}); // btnExport
+
+
+function formatETA(sec) {
+  if (!isFinite(sec) || sec < 0) return '–:–';
+  const s = Math.round(sec);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+} // formatETA()
+
+
+function updateProgressUI(done, total, etaSec = null) {
+  const pct = total ? Math.floor((done / total) * 100) : 0;
+  const $ = (id) => document.getElementById(id);
+  $('statsTotal') && ($('statsTotal').textContent = String(total));
+  $('statsDone') && ($('statsDone').textContent = String(done));
+  $('statsPercent') && ($('statsPercent').textContent = pct + '%');
+  $('statsEta') && ($('statsEta').textContent = formatETA(etaSec));
+} // updateProgressUI()
+
+
+// ------- Shell extraction
+function do_shellextraction() {
+  // Step 1: extract shell with connectivity-safe removal
+  const shell = safe_shell_extraction(FOUND_VOX, GLOBAL_INSIDE_COUNT);
+
+  // Step 2: enforce minimum degree k=1
+  const { filtered: shellCore } = enforce_min_degree(shell, 1);
+
+  // Step 3: check connectivity only (no modification here)
+  const comps = connected_components_6(shellCore);
+  const isConnected = comps.length === 1;
+  console.log(`Connectivity check: ${isConnected ? 'OK' : 'SPLIT'} (components=${comps.length})`);
+  if (!isConnected) {
+    console.table(comps.map((c, i) => ({ component: i, size: c.length })));
+  }
+
+  // Render: show the k=1 shell
+  clearRightVoxels();
+  const group = new THREE.Group();
+  viewR.scene.add(group);
+
+  const inst = new THREE.InstancedMesh(GEO_VOX, MAT_VOX_INSIDE, shellCore.length);
+  inst.count = shellCore.length;
+
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < shellCore.length; i++) {
+    const v = shellCore[i];
+    dummy.position.set(v.x, v.y, v.z);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    inst.setMatrixAt(i, dummy.matrix);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  group.add(inst);
+
+  LAST_SHELL = shell;
+} // do_shellextraction()
+
+
+function extract_shell() {
+  // Build a fast occupancy set (key = "ix,iy,iz")
+  const occ = new Set(FOUND_VOX.map((v) => `${v.ix},${v.iy},${v.iz}`));
+
+  const N = [
+    [ 1, 0, 0], [-1, 0, 0],
+    [ 0, 1, 0], [ 0,-1, 0],
+    [ 0, 0, 1], [ 0, 0,-1],
+  ];
+
+  const shell = [];
+
+  for (const v of FOUND_VOX) {
+    let neighborCount = 0;
+
+    for (const [dx, dy, dz] of N) {
+      const nx = v.ix + dx;
+      const ny = v.iy + dy;
+      const nz = v.iz + dz;
+
+      const inBounds =
+        nx >= GRID_BOUNDS.minX && nx < GRID_BOUNDS.maxX &&
+        ny >= GRID_BOUNDS.minY && ny < GRID_BOUNDS.maxY &&
+        nz >= GRID_BOUNDS.minZ && nz < GRID_BOUNDS.maxZ;
+
+      if (inBounds && occ.has(`${nx},${ny},${nz}`)) {
+        neighborCount++;
+      }
+    }
+
+    // Shell criterion: not all 6 neighbors present
+    if (neighborCount < 6) {
+      shell.push(v);
+    }
+  }
+
+  console.log(`Shell extracted: ${shell.length} voxels, interior removed: ${FOUND_VOX.length - shell.length}`);
+  return shell;
+} // extract_shell()
+
+
+function safe_shell_extraction(voxels, insideCount) {
+  const key = (v) => `${v.ix},${v.iy},${v.iz}`;
+  const N = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+
+  const set = new Set(voxels.map(key));
+  let removedCount = 0;
+
+  const deg6 = (ix, iy, iz) => {
+    let d = 0;
+    for (const [dx, dy, dz] of N) if (set.has(`${ix + dx},${iy + dy},${iz + dz}`)) d++;
+    return d;
+  };
+
+  // Candidates that are fully surrounded (6-neighborhood)
+  const interiorCandidates = voxels.filter((v) => deg6(v.ix, v.iy, v.iz) === 6);
+
+  for (const v of interiorCandidates) {
+    const k0 = key(v);
+    if (!set.has(k0)) continue;
+
+    set.delete(k0);
+
+    // Connectivity check: BFS over remaining set
+    const it = set.values().next();
+    if (!it.done) {
+      const start = it.value;
+      const visited = new Set([start]);
+      const q = [start];
+
+      while (q.length) {
+        const cur = q.pop();
+        const [cx, cy, cz] = cur.split(',').map(Number);
+        for (const [dx, dy, dz] of N) {
+          const nk = `${cx + dx},${cy + dy},${cz + dz}`;
+          if (set.has(nk) && !visited.has(nk)) {
+            visited.add(nk);
+            q.push(nk);
+          }
+        }
+      }
+
+      if (visited.size !== set.size) {
+        // Removal would split the structure → revert
+        set.add(k0);
+      } else {
+        removedCount++;
+      }
+    }
+  }
+
+  // Build shell (voxels with at least one missing neighbor)
+  const shell = [];
+  for (const k of set) {
+    const [ix, iy, iz] = k.split(',').map(Number);
+    if (deg6(ix, iy, iz) < 6) {
+      shell.push({ ix, iy, iz, x: ix + 0.5, y: iy + 0.5, z: iz + 0.5 });
+    }
+  }
+
+  const percentSaved = ((removedCount / insideCount) * 100).toFixed(2);
+  console.log(`Shell extracted: ${shell.length} voxels, interior removed: ${removedCount} (${percentSaved}% saved)`);
+
+  return shell;
+} // safe_shell_extraction()
+
+
+function isShellVoxel(v, voxelSet) {
+  // Check 6 orthogonal neighbors
+  const dirs = [
+    [ 1, 0, 0], [-1, 0, 0],
+    [ 0, 1, 0], [ 0,-1, 0],
+    [ 0, 0, 1], [ 0, 0,-1],
+  ];
+
+  for (const [dx, dy, dz] of dirs) {
+    const key = `${v.ix + dx},${v.iy + dy},${v.iz + dz}`;
+    if (!voxelSet.has(key)) {
+      return true; // Missing neighbor → on shell
+    }
+  }
+  return false; // Fully surrounded by voxels
+} // isShellVoxel()
+
+
+function enforce_min_degree(shell, minDeg = 1) {
+  // Build keys & set
+  const key = (ix, iy, iz) => `${ix},${iy},${iz}`;
+  const N = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const set = new Set(shell.map((v) => key(v.ix, v.iy, v.iz)));
+
+  // Compute degrees
+  const deg = new Map();
+  for (const v of shell) {
+    let d = 0;
+    for (const [dx, dy, dz] of N) {
+      if (set.has(key(v.ix + dx, v.iy + dy, v.iz + dz))) d++;
+    }
+    deg.set(key(v.ix, v.iy, v.iz), d);
+  }
+
+  // Queue all nodes that don't satisfy minDeg
+  const q = [];
+  for (const v of shell) {
+    const k = key(v.ix, v.iy, v.iz);
+    if ((deg.get(k) ?? 0) < minDeg) q.push(k);
+  }
+
+  // Iteratively remove (k-core)
+  while (q.length) {
+    const k = q.pop();
+    if (!set.has(k)) continue;
+    set.delete(k);
+
+    // Adjust neighbors' degree
+    const [ix, iy, iz] = k.split(',').map(Number);
+    for (const [dx, dy, dz] of N) {
+      const nk = key(ix + dx, iy + dy, iz + dz);
+      if (!set.has(nk)) continue;
+      const nd = (deg.get(nk) ?? 0) - 1;
+      deg.set(nk, nd);
+      if (nd < minDeg) q.push(nk);
+    }
+  }
+
+  const filtered = shell.filter((v) => set.has(key(v.ix, v.iy, v.iz)));
+  return { filtered, removed: shell.length - filtered.length };
+} // enforce_min_degree()
+
+
+function connected_components_6(shell) {
+  // BFS-based connected components using 6-neighborhood
+  const key = (v) => `${v.ix},${v.iy},${v.iz}`;
+  const set = new Set(shell.map(key));
+  const visited = new Set();
+  const N = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const comps = [];
+
+  for (const s of shell) {
+    const k0 = key(s);
+    if (visited.has(k0)) continue;
+
+    const q = [s];
+    const comp = [];
+    visited.add(k0);
+
+    while (q.length) {
+      const v = q.pop();
+      comp.push(v);
+      for (const [dx, dy, dz] of N) {
+        const nb = { ix: v.ix + dx, iy: v.iy + dy, iz: v.iz + dz };
+        const nk = `${nb.ix},${nb.iy},${nb.iz}`;
+        if (set.has(nk) && !visited.has(nk)) {
+          visited.add(nk);
+          // x,y,z here are only useful for later visualization
+          q.push({ ...nb, x: (v.x ?? v.ix + 0.5) + dx, y: (v.y ?? v.iy + 0.5) + dy, z: (v.z ?? v.iz + 0.5) + dz });
+        }
+      }
+    }
+    comps.push(comp);
+  }
+  return comps;
+} // connected_components_6()
+
+
+const USE_3_DIRS = true; // Toggle: use 3 rays (positive axes) or full 6
+const RAY = {
+  caster: new THREE.Raycaster(),
+  dirs: [],    // filled below depending on toggle
+  meshes: [],  // set in loadGLB_Left()
+  maxFar: 100, // set per model
+};
+
+// Set ray directions based on toggle
+RAY.dirs = USE_3_DIRS
+  ? [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]
+  : [
+      new THREE.Vector3( 1, 0, 0), new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3( 0, 1, 0), new THREE.Vector3( 0,-1, 0),
+      new THREE.Vector3( 0, 0, 1), new THREE.Vector3( 0, 0,-1),
+    ];
+
+// Count zero-ray hits from a world-space center against collected meshes
+function countZeroRaysAt(center) {
+  const caster = RAY.caster;
+  caster.firstHitOnly = true; // consider only the first hit
+  caster.near = 0;
+  caster.far = RAY.maxFar;    // finite range derived from model size
+
+  for (let i = 0; i < RAY.dirs.length; i++) {
+    caster.set(center, RAY.dirs[i]);
+    const hits = caster.intersectObjects(RAY.meshes, false); // faster than passing the full root
+    if (hits.length === 0) {
+      return { anyZero: true, zeroCount: 1 }; // early exit on first zero-ray
+    }
+  }
+  return { anyZero: false, zeroCount: 0 };
+} // countZeroRaysAt()
+
+
+let CURRENT_MODEL_URL = null; // set on load
+let LAST_SHELL = [];          // set after shell computation
+
+function export_json() {
+  if (!LAST_SHELL || LAST_SHELL.length === 0) {
+    console.warn('No shell data to export. Run shell extraction first.');
+    return;
+  }
+
+  // Shift coordinates into positive lattice (0,0,0 = left-bottom-back)
+  const out = LAST_SHELL.map((v) => ({
+    x: v.ix - GRID_BOUNDS.minX,
+    y: v.iy - GRID_BOUNDS.minY,
+    z: v.iz - GRID_BOUNDS.minZ,
+  })).sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z);
+
+  // Derive filename from model
+  let base = 'voxels';
+  if (CURRENT_MODEL_URL) {
+    const fname = CURRENT_MODEL_URL.split('/').pop().split('?')[0].split('#')[0] || 'voxels';
+    base = fname.replace(/\.(glb|gltf)$/i, '');
+  }
+  const filename = `${base}.json`;
+
+  // Trigger download
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+
+  console.log(`Export OK: ${filename} (${out.length} voxels)`);
+} // export_json()
+
+
+// ------- UI hooks for loading
+document.getElementById('loadLocal').addEventListener('click', () => loadGLB_Left('/assets/test.glb'));
+document.getElementById('file').addEventListener('change', (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  loadGLB_Left(url).finally(() => URL.revokeObjectURL(url));
+}); // file change
+
+
+// ------- Render loop
+function tick() {
+  viewL.renderer.render(viewL.scene, viewL.camera);
+  viewR.renderer.render(viewR.scene, viewR.camera);
+  requestAnimationFrame(tick);
+} // tick()
+
+tick();
+
+</script>
+  
+  
+  
+  <div class="footer-link">
+  <a href="https://github.com/svenpohl/sp-cellbots" target="_blank" rel="noopener">
+    Voxelizer 1.0 - Part of the SP-CellBot project
+  </a>
+  </div>
+
+
+</body>
+</html>
