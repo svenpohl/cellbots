@@ -56,12 +56,17 @@ structures.
 
 ## 🧩 Version
 
-Current version: **1.1**
+Current version: **1.2**
 
 ---
 
 
 ## 📝 Changelog
+
+- **1.2** (11.08.2025):  
+  – Added **Voxelizer 1.2** under `tools/voxelizer` — a Node.js script with a web-based frontend for voxelizing 3D objects (`.glb` format)  
+  – Supports configurable grid size, inside/outside detection via raycasting, optional shell extraction, progress display, and JSON export for use as CellBots target structures
+
 
 - **1.1** (23.07.2025):  
   – MasterBot can now sign messages using **HMAC**, **ED25519**, or **RSA** (configurable)  

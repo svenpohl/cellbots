@@ -232,7 +232,7 @@ This can be used to block access to certain faces (e.g., outer walls) to prevent
 > It is recommended to include it for future-proof hardware support.
 
 
-
+---
 
 ### 🔸 Subcommand: `UPDATEKEY`
 
