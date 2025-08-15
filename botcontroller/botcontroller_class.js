@@ -690,6 +690,8 @@ this.threadcounter      = 0;
 
 
   
+  
+
 
 
 //
@@ -2982,6 +2984,54 @@ wss.on('connection', (ws) => {
            this.prepare_morph( decodedobject.structure, decodedobject.algo ) ;
            } // preparemorph
            else
+
+
+        if (decodedobject.cmd === 'getpreviewtarget') 
+           {                             
+           console.log("decodedobject.structure: " + decodedobject.structure);
+           //this.answer_getpreviewtarget() ;
+           // alfalf
+                                 
+           const data = fs.readFileSync
+                (
+                path.join(__dirname, 'structures', decodedobject.structure + '.json'),
+                'utf8'
+                );
+           const targetBots = JSON.parse(data);
+           
+           answer = JSON.stringify({ answer: "answer_getpreviewtarget", target: targetBots });
+
+           console.log("ANSWER to send:");
+           console.log(answer);
+
+           ws.send(answer); 
+
+
+           /*
+            // Pfad to structures-directory
+           const structuresDir = path.join(__dirname, 'structures');
+
+           // only .json
+           function getStructurePrefixes() 
+           {
+                   return fs.readdirSync(structuresDir)
+                   .filter(filename => filename.endsWith('.json'))
+                   .map(filename => filename.replace(/\.json$/i, ''));
+           }
+
+           const list = getStructurePrefixes().join(',');
+
+           answer = JSON.stringify({ answer: "answer_requestsequences", list: getStructurePrefixes() });
+
+           
+
+           ws.send(answer);         
+
+           */
+           
+           } // getpreviewtarget
+           else
+
 
 
         if (decodedobject.cmd === 'requestsequences') 

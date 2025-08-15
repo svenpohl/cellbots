@@ -186,16 +186,18 @@ const fontDataBase64 = "eyJnbHlwaHMiOnsizr8iOnsieF9taW4iOjAsInhfbWF4Ijo3MTIsImhh
     </select>
 
 
+    <button id="targetpreview">Target Preview</button>
+
     <button id="requestquitbotcontroller">QUIT</button>
     
     
     
     <button id="requestgetmasterbot">Get Status</button> 
 
-
+    <!--
     <button id="requestgetclusterdata">Get Cluster Data</button>
-
-</div> <!-- buttonboar -->
+    -->
+</div> <!-- buttonbar -->
 
 
     
@@ -402,7 +404,6 @@ addConsoleLine("Connected" );
               } // let i...size
 
 
-
           size = decodedobject.jsondata.bots.length;
  
           for (let i=0; i<size; i++)
@@ -452,6 +453,25 @@ addConsoleLine("Connected" );
            }  
            
            
+        if ( decodedobject.answer == "answer_getpreviewtarget" )
+           {
+           console.log("ANSWER answer_getpreviewtarget");
+           
+           console.log( decodedobject.target );
+           // alfalf
+           
+           // Targets anzeigen
+const targets = decodedobject.target;
+
+showTargets(scene, decodedobject.target);
+
+//const targetGroup = createTargetGroup(targets);
+//rotateGroup.add(targetGroup);
+
+// Targets entfernen
+//rotateGroup.remove(targetGroup);
+
+           } // answer_getpreviewtarget
            
            
        if (decodedobject.answer == "answer_requestmorphalgorithms") 
@@ -582,6 +602,17 @@ addConsoleLine("Connected" );
 
 
 
+        document.getElementById('targetpreview').addEventListener('click', function() {        
+        if (connected == 0) alert('No Connection');
+        
+        let structure =  document.getElementById("sequences_list").value;
+          
+        cmd = "{ \"cmd\":\"getpreviewtarget\", \"structure\": \"" +structure+ "\"    }";; 
+        socket.send(cmd);
+                               
+        });
+
+
         document.getElementById('requestquitbotcontroller').addEventListener('click', function() {        
         if (connected == 0) alert('No Connection');
             cmd = "{ \"cmd\":\"quit\" }";; 
@@ -598,13 +629,13 @@ addConsoleLine("Connected" );
             socket.send(cmd);
         });
  
- 
+        /*
         document.getElementById('requestgetclusterdata').addEventListener('click', function() {        
         if (connected == 0) alert('No Connection');
             cmd = "{ \"cmd\":\"getclusterdata\" }";; 
             socket.send(cmd);
         });
- 
+        */
 
  
         
@@ -807,6 +838,9 @@ const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.9);
 directionalLight2.position.set(-10, 10, -10); 
 scene.add(directionalLight2);
 
+
+const basegrid = add_base_grid( 20 );
+rotateGroup.add( basegrid );
  
 
  
@@ -851,6 +885,89 @@ const texture = new THREE.TextureLoader().load(
                    }
 );
  
+
+
+
+function add_base_grid({ cells = 10, cellSize = 1, y = 0, color = 0x888888, opacity = 0.6 } = {}) {
+  const group = new THREE.Group();
+  group.name = 'basegrid';
+
+  const half = (cells * cellSize) / 2;
+  const positions = [];
+
+
+  for (let i = 0; i <= cells; i++) {
+    const t = -half + i * cellSize;
+
+    positions.push(t, y, -half,  t, y,  half);
+
+    positions.push(-half, y, t,   half, y, t);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+
+  const lines = new THREE.LineSegments(geometry, material);
+  group.add(lines);
+
+  // Optional: nicht auswählbar / nicht durch Maus-Events störbar
+  group.traverse(obj => { obj.raycast = () => {}; });
+
+  return group;
+}
+
+
+
+
+let targetGroup = null;
+
+//
+// showTargets()
+//
+function showTargets(scene, targetArray) {
+  // Remove old targes
+  if (targetGroup) {
+    rotateGroup.remove(targetGroup);
+    targetGroup.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+    targetGroup = null;
+  }
+
+  // Create new group
+  targetGroup = createTargetGroup(targetArray);
+  rotateGroup.add(targetGroup);
+}
+
+
+//
+// createTargetGroup()
+//
+function createTargetGroup(
+  targetArray,
+  { color = 0x0000ff, opacity = 0.4, cellSize = 1, zPositiveIsDepth = true } = {}
+) {
+  const group = new THREE.Group();
+  group.name = 'targetGroup';
+
+  const geometry = new THREE.BoxGeometry(cellSize, cellSize*1.1, cellSize*1.1);
+  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+
+  targetArray.forEach(({ x, y, z }) => {
+    const cube = new THREE.Mesh(geometry, material);
+    const wx = (x + 0.0) * cellSize;
+    const wy = (y + 0.0) * cellSize;
+    const wz = (z + 0.0) * cellSize * (zPositiveIsDepth ? -1 : 1); // z+ = Tiefe -> negate
+    cube.position.set(wx, wy, wz);
+    group.add(cube);
+  });
+
+  return group;
+} // createTargetGroup
+
 
  
 
