@@ -63,6 +63,10 @@ Current version: **1.2**
 
 ## 📝 Changelog
 
+- **1.3** (15.08.2025):  
+  – Added **Target Preview** feature in BotController frontend — displays a semi-transparent, slightly enlarged (scale 1.1) visualization of the target structure for improved visibility during planning and debugging  
+
+
 - **1.2** (11.08.2025):  
   – Added **Voxelizer 1.2** under `tools/voxelizer` — a Node.js script with a web-based frontend for voxelizing 3D objects (`.glb` format)  
   – Supports configurable grid size, inside/outside detection via raycasting, optional shell extraction, progress display, and JSON export for use as CellBots target structures
